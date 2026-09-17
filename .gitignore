@@ -22,3 +22,6 @@ Thumbs.db
 
 # runtime
 *.log
+
+# local-only clipboard for production secrets
+PRODUCTION_SECRETS*.txt

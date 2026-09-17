@@ -1,0 +1,77 @@
+# Render Blueprint.
+#
+# Pointing Render at this file configures the service declaratively instead of
+# clicking through a form, which means the deployment is reviewable in the repo
+# and reproducible if it ever has to be rebuilt.
+#
+# Secrets use `sync: false`. That tells Render "this variable exists, prompt me
+# for its value, and do not read it from the repo" -- so the blueprint can be
+# public while the values never are.
+
+services:
+  - type: web
+    name: livepolls-api
+    runtime: docker
+    plan: free
+
+    # Singapore is the closest Render region to India, which keeps the round
+    # trip to the browser short. MongoDB Atlas and Upstash should ideally be in
+    # the same region; a cross-continent hop on every query is the easiest
+    # latency win to give away by accident.
+    region: singapore
+
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+
+    # Render polls this. /healthz pings MongoDB and Redis for real, so a
+    # container that booted but cannot reach its databases is correctly marked
+    # unhealthy instead of quietly serving errors.
+    healthCheckPath: /healthz
+
+    envVars:
+      - key: APP_ENV
+        value: production
+
+      # Frontend and API are on different domains (vercel.app vs onrender.com),
+      # which makes every vote a cross-site request. A SameSite=Lax cookie is
+      # not sent cross-site, so without these two the anonymous voter cookie is
+      # never returned and duplicate-vote prevention silently stops working.
+      # Browsers also reject SameSite=None without Secure, so both are required
+      # together -- config.go refuses to start if only one is set.
+      - key: COOKIE_SAMESITE
+        value: none
+      - key: COOKIE_SECURE
+        value: "true"
+
+      # Render terminates TLS at its own proxy. Without this, Gin ignores
+      # X-Forwarded-For and reports the proxy's address as the client IP for
+      # every request -- so every visitor shares one rate-limit bucket and the
+      # whole site starts returning 429 after 30 votes.
+      - key: TRUSTED_PROXIES
+        value: 10.0.0.0/8
+
+      - key: MONGODB_DATABASE
+        value: livepolls
+      - key: JWT_TTL
+        value: 24h
+      - key: REDIS_COUNTS_TTL
+        value: 24h
+      - key: VOTE_RATE_LIMIT
+        value: "30"
+      - key: VOTE_RATE_WINDOW
+        value: 5m
+
+      # --- set these in the Render dashboard, never here ------------------
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: IP_HASH_SALT
+        sync: false
+
+      # The exact Vercel origin, no trailing slash. Unknown until the frontend
+      # is deployed, so it is filled in afterwards.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
