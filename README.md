@@ -385,8 +385,13 @@ step and a code generator for nine numbers.
 - **No MongoDB transaction** around vote-insert plus tally-increment, as above.
 - **No refresh tokens.** A 24-hour access token and then you log in again.
   Fine here, irritating in a real product.
-- **Rate limiting is per-IP only.** Behind CGNAT a whole neighbourhood shares a
-  bucket. A per-voter-cookie limit layered on top would be fairer.
+- **Rate limiting is per-IP only, and the IP is trusted from a header.**
+  Behind CGNAT a whole neighbourhood shares a bucket, and because
+  `TRUSTED_PROXIES` has to be `0.0.0.0/0` on Render, a determined person can
+  forge `X-Forwarded-For` to dodge their own limit. I took that trade because
+  the alternative — a proxy list that does not match Render's edge — puts every
+  visitor in one bucket and takes the whole site down. A per-voter-cookie limit
+  layered on top would be fairer and harder to forge.
 - **The counter cache can drift** if two instances seed a missing key at the
   same moment. It self-corrects on the next read after a rebuild, and the
   numbers people *see* come from MongoDB's atomic `$inc`, but it is a real

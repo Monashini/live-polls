@@ -206,3 +206,54 @@ func TestWebSocketRejectsForeignOrigin(t *testing.T) {
 		t.Error("originless client was rejected")
 	}
 }
+
+// TestTrustedProxyClientIPResolution pins down a deployment-critical detail.
+//
+// Rate limiting is per client IP. Behind a platform proxy (Render, Fly, a load
+// balancer) the request arrives from the proxy's address with the real client
+// in X-Forwarded-For. Gin only believes that header if the immediate peer is in
+// the trusted-proxy list.
+//
+// Get the list wrong and ClientIP() returns the PROXY's address for every
+// request, so every visitor on the internet shares one rate-limit bucket and
+// the whole site starts refusing votes after the limit. This test makes the
+// consequence of each setting explicit instead of something discovered in
+// production.
+func TestTrustedProxyClientIPResolution(t *testing.T) {
+	const realClient = "203.0.113.45"
+	// A platform proxy address that is NOT inside 10.0.0.0/8 -- which is the
+	// case on Render, whose edge sits on public AWS ranges.
+	const proxyAddr = "100.20.92.101:54321"
+
+	cases := []struct {
+		name    string
+		trusted []string
+		want    string
+	}{
+		{"no proxies trusted", nil, "100.20.92.101"},
+		{"private range only", []string{"10.0.0.0/8"}, "100.20.92.101"},
+		{"all proxies trusted", []string{"0.0.0.0/0"}, realClient},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			r := gin.New()
+			if err := r.SetTrustedProxies(tc.trusted); err != nil {
+				t.Fatalf("SetTrustedProxies: %v", err)
+			}
+
+			var got string
+			r.GET("/", func(c *gin.Context) { got = c.ClientIP() })
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.RemoteAddr = proxyAddr
+			req.Header.Set("X-Forwarded-For", realClient)
+			r.ServeHTTP(httptest.NewRecorder(), req)
+
+			if got != tc.want {
+				t.Errorf("ClientIP() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

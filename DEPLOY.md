@@ -14,6 +14,25 @@ support WebSockets), **Netlify** for the frontend. Avoid anything that only
 offers serverless functions for the backend — a WebSocket needs a process that
 stays alive, and a Lambda-style function cannot hold one.
 
+## One-click deploy
+
+These read `render.yaml` and `vercel.json` from the repo and pre-fill the
+forms, so the only manual work left is signing in and pasting the secret
+values.
+
+**Backend (Render)** — reads `render.yaml`, prompts for the five `sync: false`
+secrets:
+
+https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2FMonashini%2Flive-polls
+
+**Frontend (Vercel)** — sets root directory to `frontend` and prompts for
+`VITE_API_BASE_URL`:
+
+https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMonashini%2Flive-polls&root-directory=frontend&project-name=live-polls&env=VITE_API_BASE_URL&envDescription=Your%20Render%20backend%20origin%2C%20https%2C%20no%20trailing%20slash&envLink=https%3A%2F%2Fgithub.com%2FMonashini%2Flive-polls%2Fblob%2Fmain%2FDEPLOY.md
+
+Deploy the backend first so you have its URL for `VITE_API_BASE_URL`, then come
+back and set `CORS_ALLOWED_ORIGINS` on Render to the Vercel URL.
+
 ---
 
 ## Before you start
@@ -56,7 +75,7 @@ Redis wire protocol, not Upstash's HTTP API.
 | `CORS_ALLOWED_ORIGINS` | `https://your-app.vercel.app` | Exact. No trailing slash. See gotchas |
 | `COOKIE_SECURE` | `true` | |
 | `COOKIE_SAMESITE` | `none` | **Required.** See gotchas |
-| `TRUSTED_PROXIES` | `10.0.0.0/8` | **Required.** See gotchas |
+| `TRUSTED_PROXIES` | `0.0.0.0/0` | **Required.** See gotchas |
 
 Do **not** set `PORT` — Render provides it and `config.go` already reads it.
 
@@ -156,9 +175,17 @@ Render terminates TLS at its own proxy and forwards to your container. Without
 address as the client IP for every request. Every visitor then shares one
 rate-limit bucket, and after 30 votes the entire site starts returning 429.
 
-Setting `TRUSTED_PROXIES=10.0.0.0/8` tells Gin to read the real client IP from
-the forwarded header. The default is to trust nobody, because trusting
-`X-Forwarded-For` blindly lets anyone spoof their IP by setting the header.
+Setting `TRUSTED_PROXIES=0.0.0.0/0` tells Gin to read the real client IP from
+the forwarded header.
+
+Why `0.0.0.0/0` and not a private range: Render's edge runs on public cloud
+addresses, so `10.0.0.0/8` would not match and you would get exactly the
+failure above while believing you had fixed it. The cost of the broader
+setting is that someone can forge `X-Forwarded-For` to dodge their own rate
+limit — acceptable here, because this limit is load protection rather than an
+authorisation control, and double voting is stopped by a unique index keyed on
+a cookie, not by IP. If you ever gate something important on client IP, replace
+this with your platform's real egress range.
 
 ### 6. Render's free tier sleeps
 

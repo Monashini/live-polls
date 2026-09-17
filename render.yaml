@@ -43,12 +43,26 @@ services:
       - key: COOKIE_SECURE
         value: "true"
 
-      # Render terminates TLS at its own proxy. Without this, Gin ignores
-      # X-Forwarded-For and reports the proxy's address as the client IP for
-      # every request -- so every visitor shares one rate-limit bucket and the
-      # whole site starts returning 429 after 30 votes.
+      # Render terminates TLS at its own proxy and forwards the real client in
+      # X-Forwarded-For. Gin only believes that header when the immediate peer
+      # is in this list, and it returns the PROXY's address otherwise -- which
+      # would put every visitor on the internet into one rate-limit bucket and
+      # start refusing votes site-wide after 30.
+      #
+      # This is 0.0.0.0/0 rather than a private range on purpose. Render's edge
+      # sits on public cloud addresses, not 10.0.0.0/8, so a private-range list
+      # would silently produce exactly that failure. Weigh the two failure
+      # modes: too strict is a guaranteed outage for everyone; too permissive
+      # lets someone forge X-Forwarded-For to dodge their own rate limit.
+      #
+      # The forgery is acceptable here because this limit is load protection,
+      # not an authorisation control. What actually stops double voting is the
+      # unique index on (pollId, voterKey), which is keyed on a cookie and is
+      # not affected by any of this. The stored IP hash is for abuse analysis
+      # only. If this app ever gated something that mattered on client IP, this
+      # would need Render's real egress range instead.
       - key: TRUSTED_PROXIES
-        value: 10.0.0.0/8
+        value: 0.0.0.0/0
 
       - key: MONGODB_DATABASE
         value: livepolls
