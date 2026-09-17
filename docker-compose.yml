@@ -1,0 +1,56 @@
+# Local development stack: MongoDB and Redis, both real, both disposable.
+#
+# The backend is deliberately NOT in here. Running it on the host with
+# `go run ./cmd/server` gives instant rebuilds and a working debugger; putting
+# it in a container would mean a rebuild on every edit for no benefit locally.
+# The Dockerfile exists for deployment, and is what the host platform builds.
+#
+#   docker compose up -d
+#   cd backend && go run ./cmd/server
+#
+# The connection strings for this stack are:
+#   MONGODB_URI=mongodb://localhost:27017
+#   REDIS_URL=redis://localhost:6379
+#
+# Note redis:// with one 's' -- local Redis has no TLS. Hosted Redis needs
+# rediss://, and mixing them up is the single most common setup mistake.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      # A named volume, so `docker compose down` does not wipe your test data.
+      # Use `down -v` when you actually want a clean slate.
+      - mongo-data:/data/db
+    healthcheck:
+      # A real command, not a port check: the port is open before the server
+      # is ready to answer queries.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    # appendonly makes Redis survive a restart with its data. Not required --
+    # the app rebuilds every counter from MongoDB on a miss -- but it keeps
+    # local testing from silently resetting.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mongo-data:
+  redis-data:

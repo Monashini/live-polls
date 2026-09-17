@@ -1,0 +1,11 @@
+# Never let a real .env into an image. An image layer is readable by anyone who
+# can pull it, and deleting the file in a later layer does NOT remove it from
+# the earlier one.
+.env
+.env.*
+!.env.example
+
+*.log
+*.exe
+tmp/
+scripts/
