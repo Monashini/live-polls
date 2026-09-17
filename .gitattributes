@@ -1,0 +1,8 @@
+# Normalise line endings in the repository to LF regardless of who clones it.
+# Without this, committing from Windows stores CRLF and a Linux CI runner sees
+# every file as modified.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even on Windows checkouts, or bash refuses to run
+# them with a "bad interpreter: \r" error.
+*.sh text eol=lf
