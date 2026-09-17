@@ -553,6 +553,67 @@ textarea.input {
 }
 
 /* --------------------------------------------------------------------------
+   Live connection indicator
+
+   State is carried by the text as well as the colour, so it never depends on
+   telling green from amber.
+   -------------------------------------------------------------------------- */
+
+.livedot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.livedot__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex: none;
+}
+
+.livedot--live {
+  color: var(--success);
+}
+
+.livedot--live .livedot__dot {
+  background: var(--success);
+  /* A slow pulse reads as "this is a live connection" without demanding
+     attention. Fast or high-contrast animation here would be a distraction on
+     a page people leave open. */
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+.livedot--idle .livedot__dot {
+  background: #d97706;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.livedot--off .livedot__dot {
+  background: var(--ink-3);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .livedot__dot {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
    Poll list
    -------------------------------------------------------------------------- */
 

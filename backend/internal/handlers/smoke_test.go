@@ -31,7 +31,14 @@ func testRouter(t *testing.T) *gin.Engine {
 		t.Fatalf("auth service: %v", err)
 	}
 
-	r, err := NewRouter(cfg, nil, auth, services.NewPollService(nil, nil))
+	// nil store / live / hub: these tests exercise routing, guards and CORS,
+	// none of which touch a database. The health handler already tolerates a
+	// nil Redis store and hub, and no test below calls a route that would
+	// dereference them.
+	r, err := NewRouter(cfg, nil, nil, nil,
+		auth,
+		services.NewPollService(nil, nil, nil, 30, time.Minute),
+	)
 	if err != nil {
 		t.Fatalf("router: %v", err)
 	}
@@ -52,6 +59,7 @@ func TestRoutesRegister(t *testing.T) {
 		"PATCH /api/polls/:id/close": false,
 		"DELETE /api/polls/:id":      false,
 		"POST /api/polls/:id/vote":   false,
+		"GET /ws/polls/:id":          false,
 	}
 
 	for _, route := range r.Routes() {
@@ -147,5 +155,54 @@ func TestTokenRoundTrip(t *testing.T) {
 	// An unsigned / garbage token must be rejected.
 	if _, err := auth.ParseToken("not.a.token"); err == nil {
 		t.Error("garbage token accepted")
+	}
+}
+
+func TestWebSocketRouteIsPublic(t *testing.T) {
+	r := testRouter(t)
+
+	// No Authorization header. A plain GET cannot complete a WebSocket
+	// handshake, so this must NOT come back 401 -- anything other than 401
+	// proves the route is not sitting behind RequireAuth.
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/ws/polls/abc123", nil))
+
+	if w.Code == http.StatusUnauthorized {
+		t.Errorf("the live feed requires auth; anyone with the link must be able to watch")
+	}
+}
+
+func TestWebSocketRejectsForeignOrigin(t *testing.T) {
+	cfg := &config.Config{
+		Env:            "test",
+		JWTSecret:      []byte("test-secret-that-is-long-enough-000"),
+		JWTTTL:         time.Hour,
+		AllowedOrigins: []string{"http://localhost:5173"},
+		CookieSameSite: "lax",
+		IPHashSalt:     []byte("salt"),
+	}
+
+	handler := NewWSHandler(nil, nil, cfg)
+
+	allowed := httptest.NewRequest(http.MethodGet, "/ws/polls/abc", nil)
+	allowed.Header.Set("Origin", "http://localhost:5173")
+	if !handler.upgrader.CheckOrigin(allowed) {
+		t.Error("configured origin was rejected")
+	}
+
+	// WebSocket handshakes are not covered by the same-origin policy, so this
+	// check is the only thing standing between an arbitrary page and a live
+	// feed of someone else's poll.
+	foreign := httptest.NewRequest(http.MethodGet, "/ws/polls/abc", nil)
+	foreign.Header.Set("Origin", "https://evil.example.com")
+	if handler.upgrader.CheckOrigin(foreign) {
+		t.Error("foreign origin was accepted for a websocket upgrade")
+	}
+
+	// No Origin at all is a non-browser client (curl, a test), which the
+	// confused-deputy problem does not apply to.
+	none := httptest.NewRequest(http.MethodGet, "/ws/polls/abc", nil)
+	if !handler.upgrader.CheckOrigin(none) {
+		t.Error("originless client was rejected")
 	}
 }

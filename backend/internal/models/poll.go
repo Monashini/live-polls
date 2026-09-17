@@ -141,9 +141,9 @@ func (p *Poll) View(now time.Time) PollView {
 		TotalVotes:      ballots,
 		TotalSelections: selections,
 		Closed:          p.Closed,
-		Expired:      p.IsExpired(now),
-		AcceptsVotes: p.AcceptsVotes(now),
-		ExpiresAt:    p.ExpiresAt,
-		CreatedAt:    p.CreatedAt,
+		Expired:         p.IsExpired(now),
+		AcceptsVotes:    p.AcceptsVotes(now),
+		ExpiresAt:       p.ExpiresAt,
+		CreatedAt:       p.CreatedAt,
 	}
 }

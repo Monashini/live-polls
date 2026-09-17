@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // Code is a stable, machine-readable label. The frontend switches on this,
@@ -30,6 +31,8 @@ const (
 	// CodeClientClosed covers "the caller hung up before we answered". It is
 	// not a failure of ours, and must not be logged as one.
 	CodeClientClosed Code = "CLIENT_CLOSED_REQUEST"
+
+	CodeRateLimited Code = "RATE_LIMITED"
 )
 
 // StatusClientClosed is nginx's non-standard 499. Go has no constant for it.
@@ -46,6 +49,10 @@ type Error struct {
 	// Fields maps a request field name to a human-readable problem, e.g.
 	// {"options": "must contain between 2 and 10 choices"}.
 	Fields map[string]string
+
+	// RetryAfter is set on rate-limit errors and becomes the Retry-After
+	// header. Zero means "no advice to give".
+	RetryAfter time.Duration
 
 	cause error
 }
@@ -81,6 +88,18 @@ func NotFound(message string) *Error {
 
 func Conflict(code Code, message string) *Error {
 	return &Error{Status: http.StatusConflict, Code: code, Message: message}
+}
+
+// TooManyRequests carries a RetryAfter so the handler can set the header and
+// the client knows how long to back off, rather than retrying immediately and
+// making the problem worse.
+func TooManyRequests(message string, retryAfter time.Duration) *Error {
+	return &Error{
+		Status:     http.StatusTooManyRequests,
+		Code:       CodeRateLimited,
+		Message:    message,
+		RetryAfter: retryAfter,
+	}
 }
 
 func TooLarge(message string) *Error {

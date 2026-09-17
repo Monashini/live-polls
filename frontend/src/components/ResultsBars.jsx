@@ -1,4 +1,5 @@
 import { percentOf, pluralize } from '../lib/format.js'
+import { AnimatedNumber } from './AnimatedNumber.jsx'
 
 /**
  * The results breakdown.
@@ -15,6 +16,9 @@ import { percentOf, pluralize } from '../lib/format.js'
  *   tooltip would make the primary information unreachable on touch.
  * - The leading option is emphasised with font weight rather than a different
  *   colour, for the same reason.
+ * - Counts tween rather than snap. A number jumping from 7 to 8 is genuinely
+ *   easy to miss; the motion points the eye at the row that changed, which is
+ *   the entire promise of a live page.
  * - Percentages are of *voters*, not selections, so a multiple-choice poll can
  *   legitimately total more than 100%.
  */
@@ -46,7 +50,8 @@ export function ResultsBars({ options, totalVotes, highlight = [] }) {
                 )}
               </span>
               <span className="bar__value">
-                {percent}% · {option.votes}{' '}
+                <AnimatedNumber value={percent} />% ·{' '}
+                <AnimatedNumber value={option.votes} />{' '}
                 {pluralize(option.votes, 'vote')}
               </span>
             </div>

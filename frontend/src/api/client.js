@@ -9,6 +9,18 @@ const BASE_URL = (
 ).replace(/\/$/, '')
 
 /**
+ * Builds the WebSocket URL for a path, derived from the same base as REST.
+ *
+ * Derived rather than configured separately: two env vars that must always
+ * agree is two chances to get a deployment wrong, and "the API works but the
+ * live feed does not" is a confusing way to find out. http -> ws and
+ * https -> wss, so TLS carries over automatically.
+ */
+export function socketURL(path) {
+  return `${BASE_URL.replace(/^http/, 'ws')}${path}`
+}
+
+/**
  * ApiError carries the backend's structured error so a form can highlight the
  * exact field that failed. A plain Error would flatten all of that into a
  * string that the UI would then have to parse back out.

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -45,6 +47,17 @@ func fail(c *gin.Context, err error) {
 		)
 		c.AbortWithStatus(apperr.StatusClientClosed)
 		return
+	}
+
+	// Retry-After tells a well-behaved client exactly how long to wait. Without
+	// it, a rate-limited client typically retries immediately, which is the
+	// worst thing it could do to a server already under pressure.
+	if appErr.RetryAfter > 0 {
+		seconds := int(math.Ceil(appErr.RetryAfter.Seconds()))
+		if seconds < 1 {
+			seconds = 1
+		}
+		c.Writer.Header().Set("Retry-After", strconv.Itoa(seconds))
 	}
 
 	if appErr.Status >= http.StatusInternalServerError {

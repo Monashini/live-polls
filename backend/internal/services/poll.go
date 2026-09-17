@@ -12,6 +12,7 @@ import (
 	"livepolls/internal/apperr"
 	"livepolls/internal/db"
 	"livepolls/internal/models"
+	"livepolls/internal/redisstore"
 )
 
 const (
@@ -32,10 +33,31 @@ const (
 type PollService struct {
 	polls *db.PollRepo
 	votes *db.VoteRepo
+
+	// live is the Redis layer: counters, fan-out and rate limiting. It is
+	// optional at the type level (nil is tolerated everywhere below) so that
+	// a Redis outage degrades the app to Phase 2 behaviour -- votes still
+	// persist and REST still answers -- instead of taking it down.
+	live *redisstore.Store
+
+	rateLimit  int64
+	rateWindow time.Duration
 }
 
-func NewPollService(polls *db.PollRepo, votes *db.VoteRepo) *PollService {
-	return &PollService{polls: polls, votes: votes}
+func NewPollService(
+	polls *db.PollRepo,
+	votes *db.VoteRepo,
+	live *redisstore.Store,
+	rateLimit int64,
+	rateWindow time.Duration,
+) *PollService {
+	return &PollService{
+		polls:      polls,
+		votes:      votes,
+		live:       live,
+		rateLimit:  rateLimit,
+		rateWindow: rateWindow,
+	}
 }
 
 // CreatePollInput is the shape the handler passes in. It uses plain types so
@@ -124,9 +146,54 @@ func (s *PollService) Results(ctx context.Context, key string) (*models.PollView
 	}
 
 	poll = s.repairCountsIfNeeded(ctx, poll)
+	s.applyLiveTally(ctx, poll)
 
 	view := poll.View(time.Now().UTC())
 	return &view, nil
+}
+
+// applyLiveTally serves the counts from Redis when they are there, and seeds
+// Redis from MongoDB when they are not. Classic cache-aside.
+//
+// This is the "hot read path does not hit MongoDB" part of the design. The
+// poll's own document -- question, options, mode -- still comes from MongoDB,
+// because it is small, indexed, and immutable in practice. What Redis removes
+// is recomputing a tally, which is the part that grows with traffic.
+//
+// It mutates the poll in place rather than returning a new value so that every
+// caller building a view gets the same numbers without having to remember to
+// ask for them.
+func (s *PollService) applyLiveTally(ctx context.Context, poll *models.Poll) {
+	if s.live == nil {
+		return
+	}
+
+	pollID := poll.ID.Hex()
+
+	tally, found, err := s.live.GetTally(ctx, pollID, len(poll.Options))
+	if err != nil {
+		// A Redis read failure is not worth failing the request over: the
+		// MongoDB numbers already loaded are correct, just not as hot.
+		slog.Error("redis tally read failed, serving from mongodb", "pollId", pollID, "err", err)
+		return
+	}
+
+	if !found {
+		// Cache miss: populate it from the durable numbers so the next read is
+		// served from Redis. Detached, because a reader who navigated away
+		// mid-request should still leave the cache warm for the next one.
+		seedCtx, cancel := detached(ctx)
+		defer cancel()
+
+		seed := redisstore.Tally{Counts: poll.Counts, Voters: poll.Ballots}
+		if seedErr := s.live.SeedTally(seedCtx, pollID, seed); seedErr != nil {
+			slog.Error("redis tally seed failed", "pollId", pollID, "err", seedErr)
+		}
+		return
+	}
+
+	poll.Counts = tally.Counts
+	poll.Ballots = tally.Voters
 }
 
 // ListByOwner returns the caller's own polls.
@@ -169,6 +236,11 @@ func (s *PollService) Close(ctx context.Context, key string, ownerID bson.Object
 	}
 
 	view := updated.View(time.Now().UTC())
+
+	// Viewers watching this poll need to know it stopped accepting votes, or
+	// they would keep a vote form on screen that the server will now reject.
+	s.publish(ctx, redisstore.EventClosed, poll.ID.Hex(), view)
+
 	return &view, nil
 }
 
@@ -190,6 +262,16 @@ func (s *PollService) Delete(ctx context.Context, key string, ownerID bson.Objec
 		}
 		return apperr.Internal(err)
 	}
+
+	// Drop the cached counters so Redis is not holding results for a poll
+	// that no longer exists, then tell any open viewers it is gone.
+	if s.live != nil {
+		if err := s.live.DropTally(ctx, poll.ID.Hex()); err != nil {
+			slog.Error("dropping redis tally failed", "pollId", poll.ID.Hex(), "err", err)
+		}
+	}
+	s.publish(ctx, redisstore.EventDeleted, poll.ID.Hex(), nil)
+
 	return nil
 }
 
@@ -201,6 +283,13 @@ func (s *PollService) Delete(ctx context.Context, key string, ownerID bson.Objec
 // first would double-count anyone who retried a rejected request.
 func (s *PollService) Vote(ctx context.Context, key, voterKey, ipHash string, optionIndexes []int) (*models.PollView, error) {
 	now := time.Now().UTC()
+
+	// Rate limit first, before any database work. The whole point of a limit
+	// is to make abusive traffic cheap to reject; checking it after two Mongo
+	// round trips would mean an attacker still gets to consume them.
+	if err := s.checkRateLimit(ctx, ipHash); err != nil {
+		return nil, err
+	}
 
 	poll, err := s.load(ctx, key)
 	if err != nil {
@@ -243,6 +332,8 @@ func (s *PollService) Vote(ctx context.Context, key, voterKey, ipHash string, op
 		return nil, apperr.Internal(err)
 	}
 
+	// Step 2: the durable tally. MongoDB's $inc is atomic and is what makes
+	// concurrent votes correct; the number it returns is authoritative.
 	updated, err := s.polls.IncrementCounts(ctx, poll.ID, selections)
 	if err != nil {
 		// The vote is durably recorded; only the cached tally failed.
@@ -258,12 +349,131 @@ func (s *PollService) Vote(ctx context.Context, key, voterKey, ipHash string, op
 		}
 		poll.Counts = counts
 		poll.Ballots = ballots
-		view := poll.View(now)
-		return &view, nil
+		updated = poll
 	}
 
 	view := updated.View(now)
+
+	// Step 3 and 4: the live layer. Both are best-effort by design -- see
+	// applyLive. The vote is already safe at this point, so nothing below is
+	// allowed to turn a successful vote into an error response.
+	s.applyLive(ctx, updated, selections, view)
+
 	return &view, nil
+}
+
+// detachedTimeout bounds work that outlives the request that triggered it.
+const detachedTimeout = 5 * time.Second
+
+// detached returns a context that keeps the parent's values but drops its
+// cancellation, with a deadline of its own.
+//
+// This exists because of a genuine bug. The Redis work after a vote -- updating
+// the counters and publishing the fan-out event -- was using the request
+// context. When a voter submitted and immediately closed the tab, that context
+// cancelled, the publish was aborted, and every other person watching the poll
+// silently missed the update. The vote was durable and correct; the live layer
+// just never heard about it.
+//
+// Cache seeding has the same shape: an abandoned read should still leave the
+// cache warm for the next reader, not log an error and give up.
+//
+// WithoutCancel keeps any values on the context (request IDs, tracing) so the
+// logs still correlate, while the timeout stops a detached goroutine hanging
+// on an unreachable Redis.
+func detached(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(parent), detachedTimeout)
+}
+
+// checkRateLimit rejects a voter who is submitting too fast.
+//
+// Failing open on a Redis error is deliberate. The duplicate-vote unique index
+// is the control that actually protects results; this limit only protects the
+// server from load. Refusing every vote because the rate limiter is unreachable
+// would convert a Redis hiccup into a total outage of the app's core feature.
+func (s *PollService) checkRateLimit(ctx context.Context, ipHash string) error {
+	if s.live == nil || ipHash == "" {
+		return nil
+	}
+
+	result, err := s.live.AllowVote(ctx, ipHash, s.rateLimit, s.rateWindow)
+	if err != nil {
+		slog.Error("rate limit check failed, allowing the vote", "err", err)
+		return nil
+	}
+	if result.Allowed {
+		return nil
+	}
+
+	slog.Warn("vote rate limited", "current", result.Current, "limit", result.Limit)
+	return apperr.TooManyRequests(
+		"You are voting too quickly. Please wait a moment and try again.",
+		result.RetryAfter,
+	)
+}
+
+// applyLive updates the Redis counters and publishes the event that drives
+// every connected WebSocket client.
+//
+// Everything here is best-effort and logged rather than returned. Consider
+// what each failure actually means:
+//
+//   - Counter update fails: the durable tally in MongoDB is still correct, and
+//     the next read that misses the cache rebuilds it from MongoDB.
+//   - Publish fails: live viewers miss this one update. They are not stranded,
+//     because the next vote's event carries the full tally, and a client that
+//     reconnects refetches over REST.
+//
+// In neither case has the voter done anything wrong, so neither may produce an
+// error response. Turning a successful, durably-recorded vote into a 500
+// because a cache blinked would be the worst possible trade.
+func (s *PollService) applyLive(ctx context.Context, poll *models.Poll, selections []int, view models.PollView) {
+	if s.live == nil {
+		return
+	}
+
+	// Detached: the vote is already durable, and this work must complete even
+	// if the voter closed the tab the instant they submitted.
+	ctx, cancel := detached(ctx)
+	defer cancel()
+
+	pollID := poll.ID.Hex()
+
+	// Atomic HINCRBY on the live counters. A false second return means the
+	// key was not there -- evicted, expired, or Redis restarted -- in which
+	// case incrementing would have invented a tally starting from this single
+	// vote. Seed the authoritative numbers from MongoDB instead.
+	_, existed, err := s.live.IncrementVote(ctx, pollID, selections, len(poll.Options))
+	switch {
+	case err != nil:
+		slog.Error("redis counter increment failed", "pollId", pollID, "err", err)
+	case !existed:
+		tally := redisstore.Tally{Counts: poll.Counts, Voters: poll.Ballots}
+		if seedErr := s.live.SeedTally(ctx, pollID, tally); seedErr != nil {
+			slog.Error("redis counter seed failed", "pollId", pollID, "err", seedErr)
+		} else {
+			slog.Info("redis counters rebuilt from mongodb", "pollId", pollID)
+		}
+	}
+
+	// The event carries MongoDB's authoritative view, not Redis's. If the two
+	// ever disagree, what people see on screen is the durable number.
+	s.publish(ctx, redisstore.EventResults, pollID, view)
+}
+
+// publish sends one event to every backend instance watching this poll.
+func (s *PollService) publish(ctx context.Context, eventType, pollID string, payload any) {
+	if s.live == nil {
+		return
+	}
+
+	ctx, cancel := detached(ctx)
+	defer cancel()
+
+	event := redisstore.Event{Type: eventType, PollID: pollID, Poll: payload}
+	if err := s.live.PublishEvent(ctx, event); err != nil {
+		slog.Error("publishing live event failed", "pollId", pollID, "type", eventType, "err", err)
+	}
 }
 
 // load centralises "fetch a poll by id-or-slug and turn a miss into a 404".

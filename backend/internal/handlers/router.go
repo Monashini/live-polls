@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -10,12 +11,18 @@ import (
 	"livepolls/internal/config"
 	"livepolls/internal/db"
 	"livepolls/internal/middleware"
+	"livepolls/internal/redisstore"
 	"livepolls/internal/services"
+	"livepolls/internal/ws"
 )
 
 // maxRequestBody caps every inbound body. The largest legitimate request is a
 // poll with ten 120-character options, which is well under a kilobyte.
 const maxRequestBody = 32 * 1024
+
+// apiRequestTimeout bounds a single REST request. Generous enough for a cold
+// Atlas connection, short enough that a stuck query cannot pin a worker.
+const apiRequestTimeout = 15 * time.Second
 
 // NewRouter wires middleware and routes. Keeping this in one function means
 // the answer to "is this endpoint protected?" is readable in a single screen
@@ -23,6 +30,8 @@ const maxRequestBody = 32 * 1024
 func NewRouter(
 	cfg *config.Config,
 	store *db.Store,
+	live *redisstore.Store,
+	hub *ws.Hub,
 	auth *services.AuthService,
 	polls *services.PollService,
 ) (*gin.Engine, error) {
@@ -71,13 +80,22 @@ func NewRouter(
 		})
 	})
 
-	healthHandler := NewHealthHandler(store)
+	healthHandler := NewHealthHandler(store, live, hub)
 	authHandler := NewAuthHandler(auth)
 	pollHandler := NewPollHandler(polls, cfg)
+	wsHandler := NewWSHandler(hub, polls, cfg)
 
 	r.GET("/healthz", healthHandler.Check)
 
-	api := r.Group("/api")
+	// The live feed. Public, like reading results: anyone with the link may
+	// watch. It sits outside /api because it is not a REST resource and it
+	// must not inherit the API group's request-deadline middleware -- a
+	// deadline would kill a long-lived socket.
+	r.GET("/ws/polls/:id", wsHandler.Serve)
+
+	// Every REST request gets a deadline. Deliberately scoped to /api: the
+	// same deadline on /ws would kill the live feed after 15 seconds.
+	api := r.Group("/api", middleware.NewTimeout(apiRequestTimeout))
 	{
 		authRoutes := api.Group("/auth")
 		{

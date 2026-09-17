@@ -1,13 +1,13 @@
 import { Link, useParams } from 'react-router-dom'
 
 import { ApiError } from '../api/client.js'
-import * as pollsApi from '../api/polls.js'
 import { Button } from '../components/Button.jsx'
 import { CopyLink } from '../components/CopyLink.jsx'
+import { LiveStatus } from '../components/LiveStatus.jsx'
 import { ModeBadge, PollStatus } from '../components/PollStatus.jsx'
 import { ResultsBars } from '../components/ResultsBars.jsx'
 import { StateMessage } from '../components/StateMessage.jsx'
-import { useAsyncData } from '../hooks/useAsyncData.js'
+import { useLivePoll } from '../hooks/useLivePoll.js'
 import { pluralize, relativeTime, shareUrlFor } from '../lib/format.js'
 
 /**
@@ -19,16 +19,14 @@ import { pluralize, relativeTime, shareUrlFor } from '../lib/format.js'
  * the viewer is the owner. Management lives on the dashboard, where ownership
  * is established by the endpoint itself.
  *
- * The Refresh button is temporary scaffolding. Phase 5 replaces it with a
- * WebSocket push, at which point manual refreshing stops being a thing.
+ * Results arrive over a WebSocket, so nothing here polls and nothing needs a
+ * refresh. The manual refresh button only appears when the socket is down,
+ * which is the one moment it is actually useful.
  */
 export function ResultsPage() {
   const { key } = useParams()
 
-  const { data, error, loading, refetch } = useAsyncData(
-    (signal) => pollsApi.getPoll(key, { signal }),
-    [key],
-  )
+  const { poll, error, loading, connection, deleted, refetch } = useLivePoll(key)
 
   if (loading) {
     return (
@@ -67,7 +65,21 @@ export function ResultsPage() {
     )
   }
 
-  const poll = data.poll
+  if (deleted) {
+    return (
+      <div className="page">
+        <StateMessage
+          title="This poll was deleted"
+          body="The person who created it removed it while you were watching."
+        >
+          <Link className="btn btn--secondary" to="/">
+            Go home
+          </Link>
+        </StateMessage>
+      </div>
+    )
+  }
+
   const noVotesYet = poll.totalVotes === 0
 
   return (
@@ -76,6 +88,7 @@ export function ResultsPage() {
         <div className="row" style={{ gap: 'var(--s2)' }}>
           <PollStatus poll={poll} />
           <ModeBadge mode={poll.mode} />
+          <LiveStatus status={connection} />
           <span className="meta">created {relativeTime(poll.createdAt)}</span>
         </div>
         <h1>{poll.question}</h1>
@@ -97,9 +110,13 @@ export function ResultsPage() {
                 {poll.mode === 'multiple' &&
                   ` · ${poll.totalSelections} total selections`}
               </span>
-              <Button variant="ghost" size="sm" onClick={refetch}>
-                Refresh
-              </Button>
+
+              {/* Only offered when the live feed is not doing its job. */}
+              {connection !== 'open' && (
+                <Button variant="ghost" size="sm" onClick={refetch}>
+                  Refresh
+                </Button>
+              )}
             </div>
           </>
         )}

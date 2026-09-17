@@ -18,7 +18,9 @@ import (
 	"livepolls/internal/config"
 	"livepolls/internal/db"
 	"livepolls/internal/handlers"
+	"livepolls/internal/redisstore"
 	"livepolls/internal/services"
+	"livepolls/internal/ws"
 )
 
 func main() {
@@ -56,13 +58,29 @@ func run() error {
 	}
 	slog.Info("indexes ensured")
 
+	live, err := redisstore.Connect(startupCtx, cfg.RedisURL, cfg.CountsTTL)
+	if err != nil {
+		return err
+	}
+	slog.Info("redis connected", "countsTTL", cfg.CountsTTL.String())
+
+	// hubCtx outlives every request. It is cancelled during shutdown, which is
+	// what stops the Pub/Sub pump and disconnects the sockets.
+	hubCtx, stopHub := context.WithCancel(context.Background())
+	defer stopHub()
+
+	hub := ws.NewHub(live)
+	go hub.Run(hubCtx)
+
 	authService, err := services.NewAuthService(store.Users, cfg.JWTSecret, cfg.JWTTTL)
 	if err != nil {
 		return err
 	}
-	pollService := services.NewPollService(store.Polls, store.Votes)
+	pollService := services.NewPollService(
+		store.Polls, store.Votes, live, cfg.VoteRateLimit, cfg.VoteRateWindow,
+	)
 
-	router, err := handlers.NewRouter(cfg, store, authService, pollService)
+	router, err := handlers.NewRouter(cfg, store, live, hub, authService, pollService)
 	if err != nil {
 		return err
 	}
@@ -71,15 +89,22 @@ func run() error {
 		Addr:    ":" + cfg.Port,
 		Handler: router,
 
-		// Explicit timeouts. Go's defaults are "no timeout", which lets a slow
-		// or malicious client hold a connection open indefinitely.
-		// Note for a later phase: WriteTimeout has to be lifted or scoped once
-		// WebSocket connections live on this server, since those stay open by
-		// design.
+		// ReadHeaderTimeout still applies: it bounds how long a client may
+		// dawdle over the request line and headers, which is the classic
+		// Slowloris vector, and it is evaluated before any upgrade happens.
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       20 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+
+		// ReadTimeout and WriteTimeout are deliberately left at zero.
+		//
+		// They are whole-connection deadlines, and a WebSocket is a connection
+		// that is supposed to stay open for hours. A 30s WriteTimeout would
+		// sever every live viewer twice a minute. REST requests are bounded
+		// instead by the per-request context deadline installed on the /api
+		// group, and sockets by their own read/write deadlines in the ws
+		// package -- both of which know the difference between the two.
+		ReadTimeout:  0,
+		WriteTimeout: 0,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// NotifyContext cancels when the process is asked to stop. SIGTERM is what
@@ -107,11 +132,20 @@ func run() error {
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelShutdown()
 
+	// Close the sockets first. Shutdown waits for active connections, and a
+	// WebSocket is active by definition -- without this the server would sit
+	// out the full shutdown timeout on every deploy.
+	stopHub()
+	hub.Close()
+
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("graceful shutdown timed out", "err", err)
 	}
 	if err := store.Disconnect(shutdownCtx); err != nil {
 		slog.Error("mongodb disconnect failed", "err", err)
+	}
+	if err := live.Close(); err != nil {
+		slog.Error("redis disconnect failed", "err", err)
 	}
 
 	slog.Info("shutdown complete")

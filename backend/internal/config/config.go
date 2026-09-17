@@ -26,6 +26,21 @@ type Config struct {
 	MongoURI      string
 	MongoDatabase string
 
+	// RedisURL carries host, credentials and TLS in one value. "rediss://"
+	// (two esses) selects TLS, which every hosted provider requires.
+	RedisURL string
+
+	// CountsTTL bounds how long an untouched poll's counters stay in Redis.
+	// Redis is a cache here; expiry keeps memory bounded and a miss just
+	// costs one rebuild from MongoDB.
+	CountsTTL time.Duration
+
+	// VoteRateLimit / VoteRateWindow throttle votes per client IP. This is a
+	// different control from the duplicate-vote index: that stops one person
+	// voting twice on one poll, this stops a script hammering many polls.
+	VoteRateLimit  int64
+	VoteRateWindow time.Duration
+
 	JWTSecret []byte
 	JWTTTL    time.Duration
 
@@ -67,13 +82,34 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("MONGODB_DATABASE must not be empty")
 	}
 
+	cfg.RedisURL = strings.TrimSpace(os.Getenv("REDIS_URL"))
+	if cfg.RedisURL == "" {
+		return nil, fmt.Errorf("REDIS_URL is required")
+	}
+
+	var err error
+
+	cfg.CountsTTL, err = durationOr("REDIS_COUNTS_TTL", 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.VoteRateLimit, err = intOr("VOTE_RATE_LIMIT", 30)
+	if err != nil {
+		return nil, err
+	}
+	cfg.VoteRateWindow, err = durationOr("VOTE_RATE_WINDOW", 5*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	if len(secret) < minJWTSecretLen {
 		return nil, fmt.Errorf("JWT_SECRET is required and must be at least %d characters (got %d)", minJWTSecretLen, len(secret))
 	}
 	cfg.JWTSecret = []byte(secret)
 
-	ttl, err := time.ParseDuration(envOr("JWT_TTL", "24h"))
+	ttl, err := time.ParseDuration(envOr("JWT_TTL", "24h")) //nolint:staticcheck // err reused
 	if err != nil {
 		return nil, fmt.Errorf("JWT_TTL is not a valid duration (try 24h): %w", err)
 	}
@@ -126,6 +162,33 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func durationOr(key string, fallback time.Duration) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a valid duration (try 24h, 5m): %w", key, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return d, nil
+}
+
+func intOr(key string, fallback int64) (int64, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer (got %q)", key, raw)
+	}
+	return n, nil
 }
 
 func envOr(key, fallback string) string {

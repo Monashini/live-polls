@@ -5,10 +5,11 @@ import { ApiError } from '../api/client.js'
 import * as pollsApi from '../api/polls.js'
 import { Alert } from '../components/Alert.jsx'
 import { Button } from '../components/Button.jsx'
+import { LiveStatus } from '../components/LiveStatus.jsx'
 import { ModeBadge, PollStatus } from '../components/PollStatus.jsx'
 import { ResultsBars } from '../components/ResultsBars.jsx'
 import { StateMessage } from '../components/StateMessage.jsx'
-import { useAsyncData } from '../hooks/useAsyncData.js'
+import { useLivePoll } from '../hooks/useLivePoll.js'
 import { pluralize } from '../lib/format.js'
 
 const VOTED_KEY = 'livepolls.voted'
@@ -41,10 +42,8 @@ function rememberVote(slug, optionIndexes) {
 export function VotePage() {
   const { key } = useParams()
 
-  const { data, error, loading, refetch, replace } = useAsyncData(
-    (signal) => pollsApi.getPoll(key, { signal }),
-    [key],
-  )
+  const { poll, error, loading, connection, deleted, refetch, replace } =
+    useLivePoll(key)
 
   const [selected, setSelected] = useState([])
   const [submitting, setSubmitting] = useState(false)
@@ -61,8 +60,6 @@ export function VotePage() {
   const [voteOutcome, setVoteOutcome] = useState(() =>
     readVoted()[key] === undefined ? null : 'previous',
   )
-
-  const poll = data?.poll
 
   function toggleOption(index, isMultiple) {
     setVoteError(null)
@@ -146,6 +143,21 @@ export function VotePage() {
     )
   }
 
+  if (deleted) {
+    return (
+      <div className="page">
+        <StateMessage
+          title="This poll was deleted"
+          body="The person who created it removed it while you were watching."
+        >
+          <Link className="btn btn--secondary" to="/">
+            Go home
+          </Link>
+        </StateMessage>
+      </div>
+    )
+  }
+
   const isMultiple = poll.mode === 'multiple'
   const hasVoted = myVote !== null
   const showForm = poll.acceptsVotes && !hasVoted
@@ -156,6 +168,7 @@ export function VotePage() {
         <div className="row" style={{ gap: 'var(--s2)' }}>
           <PollStatus poll={poll} />
           <ModeBadge mode={poll.mode} />
+          <LiveStatus status={connection} />
         </div>
         <h1>{poll.question}</h1>
         <p className="meta">
@@ -237,9 +250,13 @@ export function VotePage() {
               {poll.totalVotes} {pluralize(poll.totalVotes, 'voter')}
               {isMultiple && ` · ${poll.totalSelections} selections`}
             </span>
-            <Button variant="ghost" size="sm" onClick={refetch}>
-              Refresh
-            </Button>
+
+            {/* Only offered when the live feed is not doing its job. */}
+            {connection !== 'open' && (
+              <Button variant="ghost" size="sm" onClick={refetch}>
+                Refresh
+              </Button>
+            )}
           </div>
         </div>
       )}
