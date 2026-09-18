@@ -6,8 +6,6 @@ A real-time polling application where users can create polls, share them through
 ## Live Demo
 
 - **Frontend:** https://mona-live-poll.vercel.app
-- **Backend:** https://live-polls-kwjq.onrender.com/healthz
-- **GitHub:** https://github.com/Monashini/live-polls
 
 > The backend is hosted on Render's free tier. After a period of inactivity, the first request may take around 30–60 seconds while the service wakes up.
 
