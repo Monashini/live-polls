@@ -20,8 +20,13 @@ services:
     # latency win to give away by accident.
     region: singapore
 
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    # rootDir makes every other path relative to backend/, which is what the
+    # Dockerfile expects: it does `COPY go.mod go.sum ./` with the Go module at
+    # the context root. Pointing dockerContext at the repo root instead makes
+    # the build fail with "open Dockerfile: no such file or directory".
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
 
     # Render polls this. /healthz pings MongoDB and Redis for real, so a
     # container that booted but cannot reach its databases is correctly marked

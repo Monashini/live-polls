@@ -56,9 +56,15 @@ Redis wire protocol, not Upstash's HTTP API.
 1. Push your code to GitHub (already done).
 2. **render.com** → New → **Web Service** → connect the `live-polls` repo.
 3. Settings:
-   - **Root Directory**: `backend`
+   - **Root Directory**: `backend`  <- easy to miss, and the build fails
+     with `open Dockerfile: no such file or directory` without it
+   - **Dockerfile Path**: `./Dockerfile`
    - **Runtime**: `Docker`
    - **Instance Type**: Free
+
+   If you created the service through "New Web Service" rather than
+   "New Blueprint", Render ignores `render.yaml` entirely and you must set
+   these two paths by hand.
 4. Add the environment variables below, then **Create Web Service**.
 
 ### Backend environment variables
