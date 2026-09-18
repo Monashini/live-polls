@@ -3,8 +3,13 @@
 Create a poll, share the link, and watch the results move as people vote.
 No refresh, no polling — results are pushed over a WebSocket.
 
-**Live:** _add your deployed URL here_
+**Live app:** https://mona-live-poll.vercel.app
+**API:** https://live-polls-kwjq.onrender.com/healthz
 **Repo:** https://github.com/Monashini/live-polls
+
+> The API runs on Render's free tier, which sleeps after ~15 minutes idle.
+> The first request after a quiet spell can take 30-60 seconds to wake it;
+> everything is instant after that.
 
 <!--
   SCREENSHOT PLACEHOLDER
@@ -403,6 +408,29 @@ step and a code generator for nine numbers.
 
 ## Deployment
 
+Live on Render (Go API, Docker) + Vercel (React) + MongoDB Atlas + Upstash Redis.
 See **[DEPLOY.md](DEPLOY.md)** for step-by-step instructions, the environment
 variables each service needs, and the CORS / `wss://` / SameSite problems you
 will hit.
+
+### Production verification
+
+Run against the deployed stack, not localhost:
+
+- 51/51 API assertions pass (`BASE=https://live-polls-kwjq.onrender.com bash backend/scripts/api-smoke.sh`)
+- WebSocket handshake returns `101 Switching Protocols` over `wss://`
+- Two independent browsers on one poll: voting in the first updated the second
+  with no refresh, and closing the poll flipped the second from "Open" to
+  "Closed" the same way
+- A vote sent by `curl` — no browser involved — reached both browsers, which
+  is only possible through Redis Pub/Sub
+- Zero `ERROR`-level entries in the Render logs across the whole run, and zero
+  browser console errors
+
+Three things broke on the way there and are worth knowing about if you deploy
+this yourself: Render ignores `render.yaml` if the service was created through
+"New Web Service", so Root Directory has to be set by hand; Atlas rejects
+non-allowlisted IPs at the TLS layer, which surfaces as a confusing
+`tls: internal error` rather than an auth failure; and Vercel projects are
+created with SSO protection on, so the public link silently redirects to a
+login page until you turn it off.
