@@ -1,93 +1,81 @@
 /* ---------------------------------------------------------------------------
    Design tokens.
 
-   Every colour, space and radius used anywhere in the app is declared once
-   here. Components reference the variables, never raw hex values, which is why
-   dark mode below is ~20 lines rather than a parallel stylesheet.
+   Every colour, space, radius and shadow used anywhere in the app is declared
+   once here. Components reference the variables, never raw values, which is
+   why dark mode below is a block of overrides rather than a second stylesheet.
    --------------------------------------------------------------------------- */
 
 :root {
-  /* One accent, used for exactly one job: "this is the interactive or measured
-     thing". Buttons, focus rings and result bars share it, so the eye learns
-     the colour means one idea. Nothing decorative is ever accent-coloured. */
-  --accent: #4f46e5;
-  --accent-strong: #4338ca;
+  /* The accent is a violet-to-pink ramp rather than one flat colour.
+     --accent is the solid step used for links, focus rings and small marks;
+     --accent-bright is the pink end, used only as the far stop of gradients
+     on the primary button and the result bars. Keeping the solid and the
+     gradient ends as separate tokens is what stops the gradient leaking onto
+     text, where it would wreck contrast. */
+  --accent: #9333ea;
+  --accent-mid: #c026d3;
+  --accent-strong: #7e22ce;
+  --accent-bright: #ec4899;
   --accent-ink: #ffffff;
-  --accent-soft: #eef2ff;
+  --accent-tint: rgb(147 51 234 / 8%);
+  --accent-ring: rgb(147 51 234 / 32%);
 
-  /* Neutrals carry all the structure. */
-  --bg: #f6f7fb;
+  /* Neutrals carry all the structure. A faint blue cast (hue 225) rather than
+     pure grey keeps them from looking muddy next to the indigo. */
+  --bg: #f7f8fc;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --border: #e4e7ec;
-  --border-strong: #cbd2dc;
+  --surface-2: #f2f4f9;
+  --surface-3: #e9ecf4;
+  --border: #e3e7f0;
+  --border-strong: #ccd3e2;
 
-  /* Ink ramp: primary text, secondary text, muted/metadata. */
-  --ink: #101828;
-  --ink-2: #475467;
-  --ink-3: #98a2b3;
+  /* Ink ramp: primary text, secondary, muted metadata. */
+  --ink: #14161f;
+  --ink-2: #4a5169;
+  --ink-3: #8b93ab;
 
-  --danger: #d92d20;
-  --danger-soft: #fef3f2;
-  --danger-border: #fecdca;
-  --success: #067647;
-  --success-soft: #ecfdf3;
+  --danger: #d6273f;
+  --danger-tint: rgb(214 39 63 / 8%);
+  --danger-border: rgb(214 39 63 / 25%);
+  --success: #0a7d4f;
+  --success-tint: rgb(10 125 79 / 10%);
+  --warning: #b45309;
 
-  /* Spacing scale, 4px base. Using only these values is what makes unrelated
-     screens feel like the same product. */
-  --s1: 0.25rem;  /*  4px */
-  --s2: 0.5rem;   /*  8px */
-  --s3: 0.75rem;  /* 12px */
-  --s4: 1rem;     /* 16px */
-  --s5: 1.5rem;   /* 24px */
-  --s6: 2rem;     /* 32px */
-  --s7: 3rem;     /* 48px */
-  --s8: 4rem;     /* 64px */
+  /* Spacing scale, 4px base. Using only these values is the cheapest thing
+     that makes unrelated screens feel like one product. */
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.5rem;
+  --s6: 2rem;
+  --s7: 3rem;
+  --s8: 4.5rem;
 
-  --r1: 6px;
-  --r2: 10px;
-  --r3: 16px;
+  --r1: 8px;
+  --r2: 12px;
+  --r3: 18px;
 
-  --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
-  --shadow-md: 0 4px 12px rgb(16 24 40 / 8%);
+  /* Layered shadows rather than one blur: a tight shadow for the contact edge
+     and a wide soft one for the ambient cast. A single shadow always reads as
+     a sticker floating above the page. */
+  --shadow-sm: 0 1px 2px rgb(20 22 31 / 5%), 0 1px 3px rgb(20 22 31 / 4%);
+  --shadow-md: 0 2px 4px rgb(20 22 31 / 4%), 0 8px 24px rgb(20 22 31 / 7%);
+  --shadow-lg: 0 4px 8px rgb(20 22 31 / 5%), 0 16px 48px rgb(20 22 31 / 10%);
 
-  /* A single measure for the content column. Long lines are the most common
+  /* One measure for the content column. Long lines are the most common
      readability failure in hand-rolled layouts. */
-  --measure: 40rem;
+  --measure: 34rem;
+  --measure-wide: 50rem;
 
-  color-scheme: light dark;
-}
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
-/* Dark mode is *selected*, not an inversion. Each value is picked against the
-   dark surface: the accent lightens (a 600-weight indigo on near-black fails
-   contrast), borders lift rather than darken, and the page background is a
-   desaturated navy rather than pure black, which is less harsh at night. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent: #8b87f5;
-    --accent-strong: #a5a1ff;
-    --accent-ink: #1a1642;
-    --accent-soft: #1e1b4b;
-
-    --bg: #0b0f1a;
-    --surface: #151b27;
-    --surface-2: #1b2230;
-    --border: #2a3342;
-    --border-strong: #3c4759;
-
-    --ink: #f2f4f7;
-    --ink-2: #b6bfcc;
-    --ink-3: #7d8899;
-
-    --danger: #fda29b;
-    --danger-soft: #2a1516;
-    --danger-border: #5c2320;
-    --success: #75e0a7;
-    --success-soft: #0f2a1d;
-
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
-    --shadow-md: 0 4px 16px rgb(0 0 0 / 45%);
-  }
+  /* Light only, deliberately. A theme the user cannot switch to is dead
+     code, and a single well-tuned palette is easier to keep consistent than
+     two half-tuned ones. The dark palette is in git history if it is ever
+     wanted back. */
+  color-scheme: light;
 }
 
 /* --------------------------------------------------------------------------
@@ -111,37 +99,49 @@ html {
 body {
   background: var(--bg);
   color: var(--ink);
-  /* System stack: zero network requests, and it already looks native on every
-     platform. A webfont would cost a round trip and a layout shift to buy
-     very little here. */
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  /* Inter first, with the system stack behind it. Inter is loaded with
+     display=swap so text is readable immediately and simply re-renders when
+     the font lands -- no invisible-text flash, no layout jump worth noticing. */
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 1rem;
-  line-height: 1.55;
+  line-height: 1.6;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100dvh;
 }
 
-/* Type scale: 12 / 14 / 16 / 20 / 28 / 34. Six sizes is enough for an app this
-   size, and a short scale is what stops headings drifting apart over time. */
+/* Type scale. Headings are tightened as they grow, because default tracking
+   that looks right at 16px looks loose and amateurish at 34px. */
 h1 {
-  font-size: clamp(1.625rem, 1.3rem + 1.4vw, 2.125rem);
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  font-weight: 650;
+  font-size: clamp(1.75rem, 1.35rem + 1.7vw, 2.375rem);
+  line-height: 1.15;
+  letter-spacing: -0.028em;
+  font-weight: 680;
 }
 
 h2 {
-  font-size: 1.25rem;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  font-weight: 620;
+  font-size: 1.1875rem;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  font-weight: 640;
+}
+
+p {
+  text-wrap: pretty;
 }
 
 a {
   color: var(--accent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 140ms var(--ease);
+}
+
+a:hover {
+  text-decoration-color: currentcolor;
 }
 
 button,
@@ -153,12 +153,16 @@ select {
 }
 
 /* One focus treatment for the whole app. :focus-visible rather than :focus so
-   a mouse click does not leave a ring behind, while keyboard users always get
-   one. */
+   a mouse click leaves no ring behind, while keyboard users always get one. */
 :where(a, button, input, textarea, select, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--r1);
+}
+
+::selection {
+  background: var(--accent-ring);
+  color: var(--ink);
 }
 
 /* --------------------------------------------------------------------------
@@ -166,12 +170,11 @@ select {
    -------------------------------------------------------------------------- */
 
 .page {
-  /* 16px side gutters on mobile, growing to 24px. The content column never
-     touches the screen edge. */
   width: 100%;
   max-width: var(--measure);
   margin-inline: auto;
-  padding: var(--s6) var(--s4) var(--s8);
+  /* 16px side gutters on phones so content never touches the edge. */
+  padding: var(--s7) var(--s4) var(--s8);
 }
 
 @media (min-width: 40rem) {
@@ -181,7 +184,7 @@ select {
 }
 
 .page--wide {
-  max-width: 52rem;
+  max-width: var(--measure-wide);
 }
 
 .stack {
@@ -209,7 +212,13 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--r3);
   padding: var(--s5);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+}
+
+@media (min-width: 40rem) {
+  .card {
+    padding: var(--s6);
+  }
 }
 
 .muted {
@@ -219,6 +228,7 @@ select {
 .meta {
   color: var(--ink-3);
   font-size: 0.8125rem;
+  letter-spacing: -0.005em;
 }
 
 .visually-hidden {
@@ -236,7 +246,11 @@ select {
    -------------------------------------------------------------------------- */
 
 .appbar {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  /* A blurred translucent bar keeps the page feeling continuous as it scrolls
+     underneath, instead of content vanishing behind an opaque slab. */
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -244,7 +258,7 @@ select {
 }
 
 .appbar__inner {
-  max-width: 52rem;
+  max-width: var(--measure-wide);
   margin-inline: auto;
   padding: var(--s3) var(--s4);
   display: flex;
@@ -253,21 +267,29 @@ select {
   gap: var(--s3);
 }
 
+@media (min-width: 40rem) {
+  .appbar__inner {
+    padding-inline: var(--s5);
+  }
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
-  font-weight: 650;
+  font-weight: 680;
+  font-size: 1.0625rem;
   color: var(--ink);
   text-decoration: none;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .brand__dot {
   width: 0.625rem;
   height: 0.625rem;
   border-radius: 50%;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  box-shadow: 0 0 0 3px var(--accent-tint);
   flex: none;
 }
 
@@ -280,42 +302,68 @@ select {
   align-items: center;
   justify-content: center;
   gap: var(--s2);
-  padding: 0.625rem var(--s4);
+  padding: 0.6875rem var(--s4);
   border-radius: var(--r2);
   border: 1px solid transparent;
   font-size: 0.9375rem;
   font-weight: 560;
+  letter-spacing: -0.01em;
   line-height: 1.2;
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
-  /* Comfortably past the 44px touch-target guidance once padding is counted. */
+  white-space: nowrap;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease),
+    color 140ms var(--ease), transform 140ms var(--ease),
+    box-shadow 140ms var(--ease);
+  /* Past the 44px touch-target guidance once padding is counted. */
   min-height: 2.75rem;
+}
+
+.btn:active:not(:disabled) {
+  /* A 1px press. Small enough to feel physical rather than bouncy. */
+  transform: translateY(1px);
 }
 
 .btn:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .btn--primary {
-  background: var(--accent);
+  /* Angled so the ramp reads across the button rather than straight down,
+     which looks like a bevel. */
+  background: linear-gradient(
+    100deg,
+    var(--accent) 0%,
+    var(--accent-mid) 55%,
+    var(--accent-bright) 100%
+  );
   color: var(--accent-ink);
+  box-shadow: 0 1px 2px rgb(20 22 31 / 10%), 0 2px 8px var(--accent-ring);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--accent-strong);
+  /* Shifting the stops rather than swapping colours keeps the hover feeling
+     like the same object lighting up. */
+  background: linear-gradient(
+    100deg,
+    var(--accent-strong) 0%,
+    var(--accent-mid) 45%,
+    var(--accent-bright) 95%
+  );
+  box-shadow: 0 2px 4px rgb(20 22 31 / 12%), 0 6px 16px var(--accent-ring);
 }
 
 .btn--secondary {
   background: var(--surface);
   border-color: var(--border-strong);
   color: var(--ink);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn--secondary:hover:not(:disabled) {
   background: var(--surface-2);
+  border-color: var(--ink-3);
 }
 
 .btn--ghost {
@@ -336,7 +384,8 @@ select {
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: var(--danger-soft);
+  background: var(--danger-tint);
+  border-color: var(--danger);
 }
 
 .btn--block {
@@ -347,6 +396,7 @@ select {
   min-height: 2.25rem;
   padding: var(--s2) var(--s3);
   font-size: 0.875rem;
+  border-radius: var(--r1);
 }
 
 /* --------------------------------------------------------------------------
@@ -362,6 +412,7 @@ select {
 .field__label {
   font-size: 0.875rem;
   font-weight: 560;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
@@ -372,36 +423,52 @@ select {
 
 .input {
   width: 100%;
-  padding: 0.625rem var(--s3);
-  background: var(--surface);
+  padding: 0.6875rem var(--s3);
+  background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--r2);
   min-height: 2.75rem;
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease),
+    background-color 140ms var(--ease);
 }
 
 .input::placeholder {
   color: var(--ink-3);
 }
 
+.input:hover:not(:focus) {
+  border-color: var(--ink-3);
+}
+
+.input:focus,
 .input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
+  background: var(--surface);
   border-color: var(--accent);
+  /* A soft ring rather than a hard outline: it reads as the field lighting up
+     rather than being boxed. */
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .input--invalid {
   border-color: var(--danger);
 }
 
+.input--invalid:focus {
+  box-shadow: 0 0 0 3px var(--danger-border);
+}
+
 .field__error {
   font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--danger);
 }
 
 textarea.input {
   resize: vertical;
-  min-height: 5rem;
-  line-height: 1.5;
+  min-height: 5.5rem;
+  line-height: 1.55;
+  padding-block: var(--s3);
 }
 
 /* --------------------------------------------------------------------------
@@ -415,23 +482,24 @@ textarea.input {
   border-radius: var(--r2);
   border: 1px solid;
   font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
 .alert--error {
-  background: var(--danger-soft);
+  background: var(--danger-tint);
   border-color: var(--danger-border);
   color: var(--danger);
 }
 
 .alert--success {
-  background: var(--success-soft);
-  border-color: transparent;
+  background: var(--success-tint);
+  border-color: color-mix(in srgb, var(--success) 25%, transparent);
   color: var(--success);
 }
 
 .alert--info {
-  background: var(--accent-soft);
-  border-color: transparent;
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--accent-strong);
 }
 
@@ -443,21 +511,26 @@ textarea.input {
   display: flex;
   align-items: flex-start;
   gap: var(--s3);
-  padding: var(--s3) var(--s4);
+  padding: var(--s4);
   border: 1px solid var(--border-strong);
   border-radius: var(--r2);
   background: var(--surface);
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition: border-color 140ms var(--ease), background-color 140ms var(--ease),
+    box-shadow 140ms var(--ease), transform 140ms var(--ease);
 }
 
 .choice:hover {
   border-color: var(--accent);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .choice:has(input:checked) {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  background: var(--accent-tint);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .choice:has(input:focus-visible) {
@@ -468,13 +541,15 @@ textarea.input {
 .choice input {
   margin-top: 0.3rem;
   accent-color: var(--accent);
-  width: 1rem;
-  height: 1rem;
+  width: 1.0625rem;
+  height: 1.0625rem;
   flex: none;
+  cursor: pointer;
 }
 
 .choice__text {
   overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 /* --------------------------------------------------------------------------
@@ -490,9 +565,7 @@ textarea.input {
 .results {
   display: flex;
   flex-direction: column;
-  /* 2px+ of surface between adjacent fills keeps them legible as separate
-     marks rather than one block. */
-  gap: var(--s4);
+  gap: var(--s5);
 }
 
 .bar__head {
@@ -505,17 +578,22 @@ textarea.input {
 
 .bar__label {
   overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  transition: color 200ms var(--ease);
 }
 
 .bar__value {
   flex: none;
+  /* Tabular figures so the numbers do not jitter sideways as they animate. */
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   font-size: 0.875rem;
+  letter-spacing: -0.01em;
 }
 
-/* The leading option is marked with weight, not colour, so it survives
-   greyscale printing and colour-vision differences. */
+/* The leading option is marked with weight and ink, never a different colour,
+   so it survives greyscale printing and colour-vision differences. */
 .bar--leading .bar__value,
 .bar--leading .bar__label {
   color: var(--ink);
@@ -523,25 +601,32 @@ textarea.input {
 }
 
 .bar__track {
-  height: 0.625rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  height: 0.75rem;
+  background: var(--surface-3);
   border-radius: 999px;
   overflow: hidden;
+  /* An inset edge makes the track read as a channel the fill sits inside,
+     rather than two stacked rectangles. */
+  box-shadow: inset 0 1px 2px rgb(20 22 31 / 6%);
 }
 
 .bar__fill {
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--accent-mid) 60%,
+    var(--accent-bright) 100%
+  );
   /* Rounded data-end only; the baseline end stays square so the bar reads as
      anchored to zero. */
-  border-radius: 0 4px 4px 0;
-  transition: width 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  border-radius: 0 999px 999px 0;
+  transition: width 520ms var(--ease);
   min-width: 0;
 }
 
-/* A zero-width fill would be invisible; nothing is drawn at all instead, so an
-   empty bar is honestly empty rather than looking like a rounding artefact. */
+/* A zero-width fill would be an invisible sliver; nothing is drawn at all, so
+   an empty bar is honestly empty rather than looking like a rounding artefact. */
 .bar__fill[data-zero="true"] {
   display: none;
 }
@@ -563,16 +648,18 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
-  font-size: 0.8125rem;
-  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
 .livedot__dot {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
   border-radius: 50%;
-  background: var(--ink-3);
+  background: currentcolor;
   flex: none;
 }
 
@@ -581,29 +668,33 @@ textarea.input {
 }
 
 .livedot--live .livedot__dot {
-  background: var(--success);
-  /* A slow pulse reads as "this is a live connection" without demanding
-     attention. Fast or high-contrast animation here would be a distraction on
-     a page people leave open. */
-  animation: pulse 2.4s ease-in-out infinite;
+  /* A slow halo pulse reads as "connected" without demanding attention on a
+     page people leave open for a long time. */
+  box-shadow: 0 0 0 0 var(--success);
+  animation: halo 2.4s var(--ease) infinite;
+}
+
+.livedot--idle {
+  color: var(--warning);
 }
 
 .livedot--idle .livedot__dot {
-  background: #d97706;
-  animation: pulse 1s ease-in-out infinite;
+  animation: halo 1s var(--ease) infinite;
 }
 
-.livedot--off .livedot__dot {
-  background: var(--ink-3);
+.livedot--off {
+  color: var(--ink-3);
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
+@keyframes halo {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentcolor 55%, transparent);
   }
-  50% {
-    opacity: 0.35;
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -624,14 +715,27 @@ textarea.input {
   padding: 0;
 }
 
+.poll-list .card {
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+
+.poll-list .card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
   gap: var(--s1);
-  padding: 0.125rem var(--s2);
+  padding: 0.1875rem var(--s2);
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 560;
+  font-size: 0.6875rem;
+  font-weight: 620;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
   border: 1px solid var(--border);
   color: var(--ink-2);
   background: var(--surface-2);
@@ -640,8 +744,8 @@ textarea.input {
 
 .badge--live {
   color: var(--success);
-  background: var(--success-soft);
-  border-color: transparent;
+  background: var(--success-tint);
+  border-color: color-mix(in srgb, var(--success) 25%, transparent);
 }
 
 /* --------------------------------------------------------------------------
@@ -656,7 +760,7 @@ textarea.input {
 }
 
 .share__url {
-  flex: 1 1 14rem;
+  flex: 1 1 15rem;
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8125rem;
@@ -668,6 +772,7 @@ textarea.input {
   white-space: nowrap;
   display: flex;
   align-items: center;
+  color: var(--ink-2);
 }
 
 /* --------------------------------------------------------------------------
@@ -684,20 +789,22 @@ textarea.input {
 }
 
 .state__title {
-  font-weight: 620;
+  font-weight: 640;
   font-size: 1.0625rem;
+  letter-spacing: -0.015em;
 }
 
 .state__body {
   color: var(--ink-2);
-  max-width: 28rem;
+  max-width: 30rem;
+  font-size: 0.9375rem;
 }
 
 .spinner {
-  width: 1.25rem;
-  height: 1.25rem;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid color-mix(in srgb, currentcolor 25%, transparent);
+  border-top-color: currentcolor;
   border-radius: 50%;
   animation: spin 620ms linear infinite;
   flex: none;
@@ -706,7 +813,9 @@ textarea.input {
 .spinner--lg {
   width: 2rem;
   height: 2rem;
-  border-width: 3px;
+  border-width: 2.5px;
+  border-color: var(--border-strong);
+  border-top-color: var(--accent);
 }
 
 @keyframes spin {
@@ -721,13 +830,13 @@ textarea.input {
   }
 }
 
-/* Skeleton rows: a grey block that matches the shape of what is loading reads
-   as "content is coming" far better than a centred spinner on a full page. */
+/* A grey block shaped like the content that is coming reads as "loading" far
+   better than a centred spinner on an otherwise empty page. */
 .skeleton {
   background: linear-gradient(
     90deg,
     var(--surface-2) 25%,
-    var(--border) 37%,
+    var(--surface-3) 37%,
     var(--surface-2) 63%
   );
   background-size: 400% 100%;

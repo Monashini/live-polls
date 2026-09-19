@@ -4,7 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Create a poll, share the link, watch results come in live." />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
+
+    <!--
+      Inter, loaded with display=swap so text paints immediately in the system
+      font and simply re-renders when Inter lands. preconnect shaves a round
+      trip off that by opening the TLS connection while the HTML is still
+      parsing. Only the weights actually used are requested.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;560;620;680&display=swap"
+    />
+
     <title>Live Polls</title>
   </head>
   <body>
